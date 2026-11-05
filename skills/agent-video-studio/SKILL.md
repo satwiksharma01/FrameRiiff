@@ -1,11 +1,15 @@
 ---
-name: agent-video
+name: agent-video-studio
 description: Inspect, reconstruct, transcribe, edit, composite, render, batch, and resume local videos through the independent Agent Video CLI and editable JSON projects. Uses supplied media; no media generation.
 ---
 
-# Agent Video
+# Agent Video Studio
 
 Turn the user's brief into a small, editable production. The CLI is the execution tool; you make the creative choices and author the JSON. Read `FORMAT.md` at the tool root before writing a project. This instruction file is original to this project.
+
+For a standalone reference adaptation, run `prepare <reference> --brief <brief> --out-dir <new-evidence-directory> --json` and read `agent-request.md`. Use `--transcribe` when the local recognizer is ready. Study the sampled frames and speech evidence, then author a project using supplied material. Use `map-words` with source transcripts after editing clip windows and before creating word anchors. Choose `--karaoke` to highlight the active spoken word. Use timed graphics for simple animated text and cards.
+
+When the brief asks for presenter, effect, or topic alternatives, put explicit `{"$slot":"name"}` markers at the fields that change. Author complete bindings for each cut, including changed speech timing and caption wording where applicable. Run `materialize` for one cut and `template-batch` for multiple cuts. Use `review <output> --project <matching-project> --out-dir <new-directory>` to decode the finished file and collect evidence. Watch the parts you changed and listen to transitions before handing over the result.
 
 ## When the destination is Frameflow
 

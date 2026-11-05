@@ -47,3 +47,10 @@ test('starts a fresh group before derived wording would exceed 1000 characters',
     { fromWord: 'w0', toWord: 'w3' }, { fromWord: 'w4', toWord: 'w7' },
   ]);
 });
+
+test('groups karaoke captions within the active phrase length limit', () => {
+  const words = transcript(3).map(word => ({ ...word, text: 'x'.repeat(120) }));
+  assert.deepEqual(groupWordCaptions(words, 4, { karaoke: true }), words.map(word => ({
+    fromWord: word.id, toWord: word.id, karaoke: true,
+  })));
+});

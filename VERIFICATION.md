@@ -1,8 +1,17 @@
 # Implementation verification
 
-Completed 2026-10-31 (Asia/Calcutta).
+## Agent Video Studio 0.1.0 — 2026-11-06
 
-## Current version: 1.1.0 — 2026-11-01
+- Compared all 53 copied source files with their original SHA-256 hashes after development. All matched.
+- Ran 153 tests on Windows with Node.js 22 and FFmpeg 9.0.1. Every test passed. The suite includes file confinement, exclusive output, timed motion, karaoke colors, source word mapping, and batch recovery.
+- Installed the local archive and ran `npm run demo` through its packaged demo script. The baseline and host, effect, and topic variants decoded successfully and yielded four distinct frame hashes at 1.2 seconds. Reopening the completed batch preserved job IDs. See `output/installed-demo/demo-result.json`. This fixture uses synthetic color footage, tones and illustrative words.
+- Rendered 100 one-frame variants from a single template. FFmpeg decoded each output to a different RGB sample. See `output/stress-100/verification.json`. This measures batch correctness with small inputs.
+- Ran the local speech path with the existing JFK speech fixture and whisper.cpp. Preparation recognized 22 words. The mapped karaoke cut rendered and decoded at 640×360, 24 fps and 12.875 seconds. Inspected the contact sheet. See `output/speech-workflow/review/review.json`.
+- The archive contains 34 files, including the standalone package API, CLI, original agent skill and demo. SHA-256 `c490dc2fa09f544efb8b8b5764395528cb01e8f12172868114baee5cc55f9540`.
+
+The standalone release targets the supplied-media agent workflow. Windows is the verified platform. Caption legibility, speech recognition quality and artistic fidelity need review against each actual project.
+
+## Frameflow preparation baseline 1.1.0 — 2026-11-01
 
 - Full native Windows `npm test`: **140 passing, zero failing or skipped**, including all previous supplied-media behavior. `output/frameflow-preparation/test-final-native.log` records the run. The restricted sandbox blocks Windows atomic rename/junction tests; the complete suite ran with normal filesystem permissions without weakening any check.
 - New checks cover reference observations/pacing, opening-focused frames, source-rate metadata, concept storyboards, generation refusal, actual file/duration checks, source-clock pause margins, frame rounding, B-roll/cards/beat declarations, whole-scene samples, source/evidence integrity, safe timing keys, structured cancellation and output preservation.

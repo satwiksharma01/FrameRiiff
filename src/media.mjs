@@ -34,11 +34,11 @@ export async function inspectMedia(file, { workDir, sceneThreshold = 0.3, focusO
   threshold(sceneThreshold);
   if (typeof focusOpening !== 'boolean') throw mediaError('INVALID_ARGUMENT', 'focusOpening must be a boolean.');
   const directory = await freshWorkDir(workDir);
-  const { source, metadata, video, audio, duration, fps } = await sourceMetadata(file, signal);
+  const { source, metadata, video, audio, duration, fps, sourceFrameRate } = await sourceMetadata(file, signal);
   const report = {
     source, sha256: await fileDigest(source, signal), duration,
     width: video?.width ?? null, height: video?.height ?? null, fps,
-    sourceFrameRate: video ? String(video.avg_frame_rate && video.avg_frame_rate !== '0/0' ? video.avg_frame_rate : video.r_frame_rate) : null,
+    sourceFrameRate,
     hasVideo: Boolean(video), hasAudio: Boolean(audio), scenes: [], frames: [], frameTimes: [], frameRequestedTimes: [], contactSheet: null,
     sceneThreshold, sceneLimitReached: false, frameSampling: focusOpening ? 'opening-and-representative' : 'representative',
   };

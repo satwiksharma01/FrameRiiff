@@ -3,7 +3,8 @@ import { constants, createReadStream } from 'node:fs';
 import { access, copyFile, lstat, open, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { join, resolve } from 'node:path';
-import { resolveCaptions, resolveClips, resolveOverlays, validateProject } from './project.mjs';
+import { writeTextFilters } from './graphics.mjs';
+import { resolveCaptions, resolveClips, resolveGraphics, resolveOverlays, validateProject } from './project.mjs';
 
 function failure(code, message) {
   return Object.assign(new Error(message), { code });
@@ -95,16 +96,16 @@ function checkInterval(metadata, kind, offset, duration, name) {
 
 async function prepareFont(workDir) {
   const candidates = [
-    join(process.env.WINDIR || 'C:\\Windows', 'Fonts', 'arial.ttf'),
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-    '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
-    '/System/Library/Fonts/Supplemental/Arial.ttf',
-    '/Library/Fonts/Arial.ttf',
+    ['Arial', join(process.env.WINDIR || 'C:\\Windows', 'Fonts', 'arial.ttf')],
+    ['DejaVu Sans', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'],
+    ['Liberation Sans', '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf'],
+    ['Arial', '/System/Library/Fonts/Supplemental/Arial.ttf'],
+    ['Arial', '/Library/Fonts/Arial.ttf'],
   ];
-  for (const file of candidates) {
+  for (const [family, file] of candidates) {
     try { await access(file); } catch { continue; }
     await copyFile(file, join(workDir, 'caption-font.ttf'));
-    return;
+    return family;
   }
   throw failure('FONT_UNAVAILABLE', 'Captions need Arial, DejaVu Sans, or Liberation Sans installed locally.');
 }
@@ -148,6 +149,7 @@ export async function renderVideo(loaded, { workDir, onProgress = () => {}, sign
   const project = validateProject(loaded.project);
   const { width, height, fps } = project.canvas;
   const timedCaptions = resolveCaptions(project);
+  const graphics = resolveGraphics(project);
   const clips = resolveClips(project);
   const overlays = resolveOverlays(project);
   const cache = { hits: 0, misses: 0 };
@@ -233,13 +235,9 @@ export async function renderVideo(loaded, { workDir, onProgress = () => {}, sign
   const duration = previousFrame / fps;
   await writeFile(join(workDir, 'segments.txt'), `${segments.join('\n')}\n`, { flag: 'wx' });
 
-  const captions = [];
-  if (timedCaptions.length) await prepareFont(workDir);
-  for (const [index, caption] of timedCaptions.entries()) {
-    await writeFile(join(workDir, `caption-${index}.txt`), caption.text, { flag: 'wx' });
-    const y = { top: 'h*0.08', center: '(h-text_h)/2', bottom: 'h*0.88-text_h' }[caption.position];
-    captions.push(`drawtext=fontfile=caption-font.ttf:textfile=caption-${index}.txt:expansion=none:fontsize=${caption.fontSize}:fontcolor=${caption.color}:x=(w-text_w)/2:y=${y}:box=1:boxcolor=black@0.55:boxborderw=12:enable='gte(t,${caption.start})*lt(t,${caption.end})'`);
-  }
+  const textFilters = timedCaptions.length || graphics.length
+    ? await writeTextFilters(timedCaptions, graphics, project.canvas, await prepareFont(workDir), workDir)
+    : [];
   const args = [...quiet, '-filter_complex_threads', '2', '-f', 'concat', '-safe', '1', '-i', 'segments.txt'];
   for (const track of project.audio) args.push(...localInput, '-i', resolve(root, track.src));
   for (const overlay of overlays) {
@@ -272,7 +270,7 @@ export async function renderVideo(loaded, { workDir, onProgress = () => {}, sign
     videoFilters.push(`${picture}[overlay${index}]overlay=x=${x}:y=${y}:eof_action=pass:repeatlast=0:format=auto:enable='gte(t,${overlay.start})*lt(t,${overlay.start + overlay.duration})'[layer${index}]`);
     picture = `[layer${index}]`;
   }
-  videoFilters.push(`${picture}${captions.length ? captions.join(',') : 'null'}[video]`);
+  videoFilters.push(`${picture}${textFilters.length ? textFilters.join(',') : 'null'}[video]`);
   await writeFile(join(workDir, 'compose-filter.txt'), [...videoFilters, ...audioFilters].join(';'), { flag: 'wx' });
   args.push('-/filter_complex', 'compose-filter.txt', '-map', '[video]', '-map', '[audio]');
   args.push(

@@ -1,11 +1,18 @@
 import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { loadProject, resolveCaptions, resolveClips, resolveOverlays, validateAssets, validateProject } from './project.mjs';
+import { isDeepStrictEqual } from 'node:util';
+import { loadProject, resolveCaptions, resolveClips, resolveGraphics, resolveOverlays, validateAssets, validateProject } from './project.mjs';
 import { readJob, runJob } from './jobs.mjs';
 import { groupWordCaptions } from './captions.mjs';
 import { runBatch } from './batch.mjs';
 
-const help = `Agent Video — local video tools for coding agents
+const help = `Agent Video Studio — local video production for coding agents
+
+  agent-video-studio prepare reference.mp4 --out-dir session [--brief "What should change"] [--transcribe]
+  agent-video-studio materialize template.json --bindings choices.json --out project.json
+  agent-video-studio template-batch template.json --variants variants.json --out-dir new-directory
+  agent-video-studio map-words project.json --words sources.json --out timed.json [--karaoke]
+  agent-video-studio review video.mp4 --out-dir review [--project project.json]
 
   agent-video init [directory]                    Create an editable demo project
   agent-video doctor                              Check FFmpeg and FFprobe
@@ -14,7 +21,7 @@ const help = `Agent Video — local video tools for coding agents
   agent-video render project.json --out video.mp4  Render; never overwrite an output
   agent-video status project.json --job UUID       Read a render's saved status
   agent-video variant project.json --patch edits.json --out variant.json
-  agent-video captions project.json --words words.json --out timed.json [--group-size 4]
+  agent-video captions project.json --words words.json --out timed.json [--group-size 4] [--karaoke]
   agent-video batch project.json --variants variants.json --out-dir new-directory
   agent-video inspect media.mp4 --out-dir evidence [--scene-threshold 0.3]
   agent-video reconstruct media.mp4 --out-dir new-project [--scene-threshold 0.3]
@@ -31,18 +38,19 @@ Add --json for structured output. Paths in commands are relative to the working
 directory. Media paths inside a project are relative to that project's directory.
 Variants stay beside the original project; supplied top-level fields replace the
 original fields, including whole arrays. Use check before rendering a variant.
-`;
+`.replace(/^  agent-video /gm, '  agent-video-studio ');
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
-const valueOptions = ['--out', '--patch', '--job', '--words', '--group-size', '--variants', '--out-dir', '--scene-threshold', '--language', '--inputs', '--brief', '--timings', '--concept', '--seconds'];
+const valueOptions = ['--out', '--patch', '--job', '--words', '--group-size', '--variants', '--out-dir', '--scene-threshold', '--language', '--inputs', '--brief', '--timings', '--concept', '--seconds', '--bindings', '--project'];
+const booleanOptions = ['--json', '--help', '--version', '--transcribe', '--karaoke'];
 
 function parse(argv) {
   const options = {};
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const word = argv[i];
-    if (word === '--json' || word === '--help' || word === '--version') {
+    if (booleanOptions.includes(word)) {
       if (options[word]) fail('USAGE_ERROR', `Repeated option ${word}.`);
       options[word] = true;
     } else if (valueOptions.includes(word)) {
@@ -54,22 +62,26 @@ function parse(argv) {
   const [command = 'help', ...args] = positional;
   const allowed = {
     init: [], doctor: [], check: [], plan: [], render: ['--out'], status: ['--job'], variant: ['--out', '--patch'],
-    captions: ['--words', '--out', '--group-size'], batch: ['--variants', '--out-dir'], inspect: ['--out-dir', '--scene-threshold'],
+    captions: ['--words', '--out', '--group-size', '--karaoke'], batch: ['--variants', '--out-dir'], inspect: ['--out-dir', '--scene-threshold'],
     reconstruct: ['--out-dir', '--scene-threshold'], transcribe: ['--out-dir', '--language'], resume: ['--job', '--out'], 'resume-batch': [],
     'reference-prepare': ['--inputs', '--brief', '--timings', '--out-dir', '--scene-threshold'], 'reference-check': [],
     'frameflow-check': ['--inputs', '--brief', '--timings'], 'frameflow-export': ['--concept', '--out-dir'],
     'reference-sample': ['--concept', '--seconds', '--out-dir'], help: [],
+    prepare: ['--out-dir', '--brief', '--scene-threshold', '--transcribe', '--language'], review: ['--out-dir', '--project'],
+    materialize: ['--out', '--bindings'], 'template-batch': ['--variants', '--out-dir'], 'map-words': ['--words', '--out', '--group-size', '--karaoke'],
   };
   const required = {
     render: ['--out'], status: ['--job'], variant: ['--out', '--patch'], captions: ['--words', '--out'], batch: ['--variants', '--out-dir'],
     inspect: ['--out-dir'], reconstruct: ['--out-dir'], transcribe: ['--out-dir'], resume: ['--job'],
     'reference-prepare': ['--inputs', '--brief', '--out-dir'], 'frameflow-check': ['--inputs', '--brief'],
     'frameflow-export': ['--concept', '--out-dir'], 'reference-sample': ['--concept', '--seconds', '--out-dir'],
+    prepare: ['--out-dir'], review: ['--out-dir'], materialize: ['--out', '--bindings'],
+    'template-batch': ['--variants', '--out-dir'], 'map-words': ['--words', '--out'],
   };
   if (options['--help']) return { command: 'help', args: [], options };
   if (options['--version']) return { command: 'version', args: [], options };
   if (!Object.hasOwn(allowed, command)) fail('USAGE_ERROR', `Unknown command ${command}. Use --help.`);
-  for (const key of valueOptions) {
+  for (const key of [...valueOptions, '--transcribe', '--karaoke']) {
     if (options[key] !== undefined && !allowed[command].includes(key)) fail('USAGE_ERROR', `${key} is not supported by ${command}.`);
   }
   const count = command === 'init' ? [0, 1] : ['doctor', 'help'].includes(command) ? [0, 0] : [1, 1];
@@ -86,7 +98,7 @@ function plan(project) {
     return { id: clip.id, kind: clip.kind, start, end: duration, ...(clip.src ? { src: clip.src } : {}), ...(project.clips[index].untilWord ? { untilWord: project.clips[index].untilWord } : {}) };
   });
   const overlays = resolveOverlays(project);
-  return { title: project.title, duration, renderDuration: Math.round(duration * project.canvas.fps) / project.canvas.fps, ...project.canvas, clips, overlays, overlayCount: overlays.length, captionCount: project.captions.length, captions: resolveCaptions(project), wordCount: project.words.length, audioTrackCount: project.audio.length };
+  return { title: project.title, duration, renderDuration: Math.round(duration * project.canvas.fps) / project.canvas.fps, ...project.canvas, clips, overlays, overlayCount: overlays.length, captionCount: project.captions.length, captions: resolveCaptions(project), graphics: resolveGraphics(project), wordCount: project.words.length, audioTrackCount: project.audio.length };
 }
 
 async function writeNew(file, data) {
@@ -144,6 +156,14 @@ function checkBatchResult(batch) {
   return { batch, message: `Completed ${batch.variants.length} cuts in ${batch.directory}` };
 }
 
+async function runCliBatch(loaded, variants, outDir, signal) {
+  const batch = await runBatch(loaded, variants, outDir, {
+    signal,
+    onProgress: progress => process.stderr.write(`[${progress.variantId}/${progress.jobId}] ${progress.stage} ${progress.completed}/${progress.total}${progress.cached ? ' (reused)' : ''}\n`),
+  });
+  return checkBatchResult(batch);
+}
+
 async function execute({ command, args, options }) {
   if (command === 'help') return { help };
   if (command === 'version') {
@@ -167,6 +187,47 @@ async function execute({ command, args, options }) {
   }
   if (command === 'status') {
     return { job: await readJob(await projectRoot(args[0]), options['--job']) };
+  }
+  if (command === 'prepare' || command === 'review') {
+    const { prepareStudio, reviewStudio } = await import('./studio.mjs');
+    return withCancellation(async signal => {
+      const outDir = options['--out-dir'];
+      if (command === 'prepare') {
+        const prepared = await prepareStudio(args[0], { outDir, signal, brief: options['--brief'],
+          sceneThreshold: Number(options['--scene-threshold'] ?? 0.3), transcribe: options['--transcribe'] ?? false,
+          language: options['--language'] ?? 'en' });
+        return { ...prepared, message: `Read ${prepared.request} to develop the cut.` };
+      }
+      const reviewed = await reviewStudio(args[0], { outDir, signal, projectFile: options['--project'] });
+      if (!reviewed.passed) throw Object.assign(new Error(`Output did not match the project. See ${reviewed.report}.`), {
+        code: 'REVIEW_MISMATCH', details: { report: reviewed.report, checks: reviewed.checks },
+      });
+      return { ...reviewed, message: `Review saved to ${reviewed.report}` };
+    });
+  }
+  if (command === 'materialize' || command === 'template-batch') {
+    const { materializeTemplate, loadTemplate, bindTemplate } = await import('./template.mjs');
+    if (command === 'materialize') return materializeTemplate(args[0], options['--bindings'], options['--out']);
+    const variants = await readJson(resolve(options['--variants']), 'INVALID_BATCH');
+    if (!Array.isArray(variants) || variants.length < 1 || variants.length > 100) fail('INVALID_BATCH', 'Supply 1 through 100 template variants.');
+    return withCancellation(async signal => {
+      const loaded = await loadTemplate(args[0]);
+      const patches = [];
+      let base;
+      let patchBytes = 0;
+      for (const variant of variants) {
+        if (!variant || typeof variant !== 'object' || Array.isArray(variant)
+          || Object.keys(variant).some(key => !['id', 'bindings'].includes(key))) fail('INVALID_BATCH', 'Each template variant must have id and bindings.');
+        signal.throwIfAborted();
+        const project = await bindTemplate(loaded, variant.bindings);
+        base ??= project;
+        const patch = Object.fromEntries(Object.entries(project).filter(([key, value]) => !isDeepStrictEqual(value, base[key])));
+        patchBytes += Buffer.byteLength(JSON.stringify(patch, null, 6));
+        if (patchBytes > 4 * 1024 * 1024) fail('INVALID_BATCH', 'Resolved changes exceed the batch record budget. Split this batch.');
+        patches.push({ id: variant.id, patch });
+      }
+      return runCliBatch({ root: loaded.root, projectPath: loaded.projectPath, project: base }, patches, options['--out-dir'], signal);
+    });
   }
   if (command === 'inspect' || command === 'reconstruct') {
     const { inspectMedia, reconstructMedia } = await import('./media.mjs');
@@ -231,22 +292,23 @@ async function execute({ command, args, options }) {
     const updated = validateProject({ ...loaded.project, ...patch });
     return saveSibling(loaded, updated, options['--out']);
   }
+  if (command === 'map-words') {
+    const { mapSourceWords } = await import('./map-words.mjs');
+    const sources = await readJson(resolve(options['--words']), 'INVALID_WORDS');
+    return saveSibling(loaded, mapSourceWords(loaded.project, sources, {
+      groupSize: Number(options['--group-size'] ?? 4), karaoke: options['--karaoke'] ?? false,
+    }), options['--out']);
+  }
   if (command === 'captions') {
     const words = await readJson(resolve(options['--words']), 'INVALID_WORDS');
     if (!Array.isArray(words) || words.length === 0) fail('INVALID_WORDS', 'Supply a nonempty array of timed words.');
-    const captions = groupWordCaptions(words, Number(options['--group-size'] ?? 4));
+    const captions = groupWordCaptions(words, Number(options['--group-size'] ?? 4), { karaoke: options['--karaoke'] ?? false });
     const updated = validateProject({ ...loaded.project, words, captions });
     return saveSibling(loaded, updated, options['--out']);
   }
   if (command === 'batch') {
     const variants = await readJson(resolve(options['--variants']), 'INVALID_BATCH');
-    return withCancellation(async signal => {
-      const batch = await runBatch(loaded, variants, options['--out-dir'], {
-        signal,
-        onProgress: progress => process.stderr.write(`[${progress.variantId}/${progress.jobId}] ${progress.stage} ${progress.completed}/${progress.total}${progress.cached ? ' (reused)' : ''}\n`),
-      });
-      return checkBatchResult(batch);
-    });
+    return withCancellation(signal => runCliBatch(loaded, variants, options['--out-dir'], signal));
   }
   return withCancellation(async signal => {
     const job = await runJob(loaded, options['--out'], {

@@ -119,7 +119,7 @@ An export includes the selected `storyboard.json`, `brief.json`, normalized `inp
 import {
   integrationVersion, prepareReference, checkReference,
   exportFrameflow, sampleReference, validateStoryboard,
-} from 'agent-video-local';
+} from 'agent-video-studio/frameflow';
 
 const bundle = await exportFrameflow(sessionDirectory, {
   concept: 'product-demo', outDir: newHandoffDirectory, signal,

@@ -4,10 +4,7 @@ function invalid(message) {
   throw new ProjectError('INVALID_WORDS', message);
 }
 
-export function groupWordCaptions(words, maxWords = 4) {
-  if (!Number.isInteger(maxWords) || maxWords < 1 || maxWords > 12) {
-    invalid('Caption group size must be an integer from 1 through 12');
-  }
+export function validateTimedWords(words) {
   if (!Array.isArray(words) || words.length > 2000) invalid('Expected an array of at most 2000 timed words');
   const ids = new Set();
   let previousEnd = 0;
@@ -25,15 +22,23 @@ export function groupWordCaptions(words, maxWords = 4) {
     ids.add(word.id);
     previousEnd = word.end;
   }
+}
+
+export function groupWordCaptions(words, maxWords = 4, { karaoke = false } = {}) {
+  if (!Number.isInteger(maxWords) || maxWords < 1 || maxWords > 12) {
+    invalid('Caption group size must be an integer from 1 through 12');
+  }
+  validateTimedWords(words);
+  const maxCharacters = karaoke ? 240 : 1000;
   const captions = [];
   let group;
   let count = 0;
   let length = 0;
   for (const [index, word] of words.entries()) {
     const gap = index === 0 ? 0 : word.start - words[index - 1].end;
-    if (!group || count === maxWords || gap > 0.6 + 1e-9 || length + 1 + word.text.length > 1000) {
+    if (!group || count === maxWords || gap > 0.6 + 1e-9 || length + 1 + word.text.length > maxCharacters) {
       if (captions.length === 200) invalid('The supplied timings require more than 200 captions; choose a larger group size or split the production');
-      group = { fromWord: word.id, toWord: word.id };
+      group = { fromWord: word.id, toWord: word.id, ...(karaoke ? { karaoke: true } : {}) };
       captions.push(group);
       count = 0;
       length = 0;

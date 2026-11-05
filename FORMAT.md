@@ -94,6 +94,23 @@ Audio tracks optionally accept `fadeIn` and `fadeOut`; both default to zero and 
 
 `src/captions.mjs` exports `groupWordCaptions(words, maxWords = 4)` → anchored caption objects. It groups up to `maxWords` (integer 1–12) and starts a new group after a gap greater than 0.6 seconds or before joined text exceeds 1000 characters. It refuses input requiring more than 200 captions; it never truncates the transcript. The CLI `captions project.json --words words.json --out sibling.json [--group-size 4]` replaces `words` and `captions` using a nonempty JSON array of the word objects above. The new project stays beside the source, is validated, and never overwrites a file. This imports supplied timings; no transcription or alignment model runs.
 
+## Timed graphics and karaoke
+
+`graphics` accepts up to 32 text cards. Each card has a unique ID, literal text of up to 240 characters over four lines, and either `start`/`end` in project seconds or inclusive `fromWord`/`toWord` anchors. `position` accepts `top`, `center`, or `bottom`. `fontSize` uses the caption range. `color` and `background` are six-digit hex colors. Set `motion` to `none`, `fade`, or `slide-up`. An optional `enter` for an animated card must fit the cue and cannot exceed three seconds. Cards render above footage and B-roll, with captions above them.
+
+```json
+{
+  "graphics": [{"id":"intro","text":"Today’s comparison","start":0.2,"end":2.2,"position":"top","background":"#284077","motion":"slide-up","enter":0.25}],
+  "captions": [{"fromWord":"w1","toWord":"w4","karaoke":true,"highlightColor":"#ffd166"}]
+}
+```
+
+Karaoke displays the anchored words together and changes the active word color as speech advances. Each karaoke cue accepts up to 12 words and 240 characters. A project accepts up to 1,000 karaoke word appearances. Use normal anchored captions for custom display text. Karaoke needs FFmpeg with the `ass` filter. Use `plan` to inspect the resolved cues and watch the rendered output to verify fit and timing.
+
+## Reusable project templates
+
+A template is a version-1 project that uses an exact `{"$slot":"name"}` object wherever it needs a value supplied later. Every slot has one required binding. Repeated uses share the same value. Bindings contain literal JSON and can substitute a whole array or object, for example the `words` list for a replacement performance or an entire `effects` block. Every bound project passes ordinary schema and local asset checks. `materialize` writes a fresh sibling project. `template-batch` accepts `{id, bindings}` entries and records the resolved project changes in the normal batch format for resume.
+
 ## Batch variants and clip reuse
 
 `batch project.json --variants variants.json --out-dir new-directory` accepts a JSON array of 1–100 objects `{ "id": "opening-a", "patch": { "title": "Opening A" } }`. IDs are unique, case-insensitively, match the clip-ID syntax, and cannot be Windows device names. Patch fields replace top-level project fields exactly as in `variant`; all resulting projects and assets are validated before creating the output directory. Relative assets retain the original project root.

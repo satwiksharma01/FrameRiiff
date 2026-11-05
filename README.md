@@ -1,21 +1,21 @@
-# Agent Video
+# Agent Video Studio
 
-An independently written local video tool for coding agents. The agent writes an editable JSON project; the CLI validates it, renders an MP4, and records what happened. It uses no Hypit packages or runtime and has no JavaScript dependencies.
+Agent Video Studio turns a reference and supplied assets into editable video projects, playable MP4s, and reusable variants. A coding agent studies the reference and authors the JSON. The CLI measures source evidence, validates the edit, renders it with FFmpeg, and records the output and its lineage.
 
-An agent can inspect a reference, reconstruct an editable project, transcribe local speech, bind cuts/B-roll/captions to word IDs, composite supplied media, render variants, and resume interrupted work. Generation is excluded: the tool has no image, voice, or video generation service. It uses supplied local material and has no embedded LLM or web editor.
+Use a local reference and provide the replacement footage, images, audio, and brand material. Templates let the agent substitute a presenter, treatment, or topic while reusing the rest of the edit. Timed cards, karaoke captions, word-anchored cuts, B-roll, audio mixing, and resumable batches run in the standalone renderer.
 
-Version 1.1 also prepares reference workflows for Frameflow: measured reference evidence, agent-authored analysis and 2–3 concepts, strict storyboard/source-time checks, safe sample storyboards and a versioned handoff. It leaves Frameflow's code, native editor projects and manual-edit history untouched. Read [FRAMEFLOW.md](FRAMEFLOW.md) for the exact commands and public module API. Main Frameflow integration and native-editor execution remain the Frameflow developer's work; a rendered MP4 is not that handoff.
+The optional Frameflow adapter is available through `agent-video-studio/frameflow`. See [FRAMEFLOW.md](FRAMEFLOW.md) for its storyboard contract. The main package entry exports the standalone preparation, project, template, render, batch, resume, and review APIs.
 
 ## Run it
 
-Requirements: Node.js 22 or newer and FFmpeg/FFprobe on `PATH`. FFmpeg must support loading filter arguments with `-/filter_complex` and include `libx264`, AAC encoding, and `drawtext` (verified here with FFmpeg/FFprobe 9.0.1). The file-based filter option is described in the [official FFmpeg options](https://ffmpeg.org/ffmpeg.html#Options). Captions use an installed Arial, DejaVu Sans, or Liberation Sans font. Set `FFMPEG_PATH` and `FFPROBE_PATH` to executable paths when necessary. Local transcription additionally needs whisper.cpp and a compatible model. No JavaScript dependency installation, API key, or model-service credits are required.
+Use Node.js 22 or newer and FFmpeg/FFprobe on `PATH`. The renderer uses `libx264`, AAC, `drawtext`, and file-based `-/filter_complex`. Karaoke additionally needs FFmpeg's `ass` filter with libass. Captions and cards use an installed Arial, DejaVu Sans, or Liberation Sans font. `FFMPEG_PATH` and `FFPROBE_PATH` can select specific executables. Transcription uses whisper.cpp with an operator-supplied model. [FFmpeg options](https://ffmpeg.org/ffmpeg.html#Options)
 
 Run directly from this source directory, or install a locally built archive into a separate directory:
 
 ```powershell
 npm pack
-npm install --prefix ./agent-video-install --ignore-scripts ./agent-video-local-1.0.0.tgz
-npm exec --prefix ./agent-video-install --no -- agent-video --help
+npm install --prefix ./studio-install --ignore-scripts ./agent-video-studio-0.1.0.tgz
+npm exec --prefix ./studio-install --no -- agent-video-studio --help
 ```
 
 No global installation or registry publication is required. The examples below use the source launcher:
@@ -31,6 +31,24 @@ node bin/agent-video.mjs render my-video/project.json --out output/my-video.mp4
 `init` writes a six-second portrait example. Replace its color scenes with your own media: put files in `my-video/assets/`, use `kind: "video"` or `kind: "image"`, and supply `src: "assets/your-file.mp4"`. Video clips preserve source audio by default; set `volume: 0` to mute. Images and video crop to fill the selected canvas.
 
 Read [FORMAT.md](FORMAT.md) for the complete project contract. Supported input families are MP4/MOV/M4A/3GP, Matroska/WebM, AVI, MPEG-TS, MP3/AAC, WAV, FLAC, Ogg, and PNG/JPEG/WebP/BMP/TIFF images. Image clips hold their first frame. Playlists, image sequences, SVG, and network inputs are deliberately rejected; convert them into a self-contained media file first. Captions support explicit line breaks, color, size, and three positions. They do not automatically wrap, so inspect your output when changing wording or canvas size.
+
+## Reference to variants
+
+Open the video project in a coding agent and give it the production skill. Put supplied assets inside the project folder. Prepare the reference, read the generated request and contact sheet, and use them to author the edit. Add `--transcribe --language en` when local speech recognition is configured and you need reference word timings. [Production skill](skills/agent-video-studio/SKILL.md)
+
+```powershell
+node bin/agent-video.mjs prepare reference.mp4 --brief "Keep the fast opening and adapt the topic" --out-dir evidence --json
+node bin/agent-video.mjs materialize project/template.json --bindings project/choices.json --out project/cut.json --json
+node bin/agent-video.mjs render project/cut.json --out first-cut.mp4 --json
+node bin/agent-video.mjs review first-cut.mp4 --project project/cut.json --out-dir first-review --json
+node bin/agent-video.mjs template-batch project/template.json --variants project/variants.json --out-dir variants --json
+```
+
+The template is an ordinary project with explicit value slots. For example, `"src": {"$slot":"host"}` accepts `{"host":"assets/second-presenter.mp4"}`. A binding can replace a string, number, object, or array. Use whole `words` or `clips` slots when a new recording needs different timing. Provide all and only the named slots, and save the materialized project beside the template. A batch reads an array of `{ "id": "second-host", "bindings": { "host": "assets/second-presenter.mp4" } }` entries, validates every cut before creating its output folder, and can resume with the existing `resume-batch` command.
+
+`map-words` transfers measured source words into an edit with explicit clip durations and groups captions at clip boundaries. Its `--words` file maps each used asset path to the corresponding `words.json` array, for example `{"assets/host.mp4":[{"id":"w1","text":"Hello","start":0.4,"end":0.7}]}`. Use `--karaoke` for active word color. Move any cut that intersects a supplied word to a speech gap. Run the map before adding word-anchored cuts, overlays, and cards, then recheck timing after replacing a recording.
+
+`review` decodes the output, produces a contact sheet, and checks canvas, frame rate, and duration when given the corresponding project. Listen to the output and inspect its frames for creative and timing quality. Run `npm run demo` to see four real renders with visibly distinct baseline, host, effect, and topic cuts. The demo uses synthetic footage and illustrative word timings.
 
 ## Inspect and reconstruct a reference
 
@@ -142,9 +160,9 @@ node bin/agent-video.mjs batch examples/hello/timed.json --variants examples/hel
 
 ## Use with an agent
 
-Tell the agent to read [`skills/agent-video/SKILL.md`](skills/agent-video/SKILL.md), give it a brief and local media, and ask it to produce a video using this CLI. The skill is shipped here as an original instruction file; it has not been installed globally or registered in an agent configuration. A starting prompt:
+Give the agent the packaged production skill, a brief, and local media. Ask it to produce a video using this CLI. [Production skill](skills/agent-video-studio/SKILL.md)
 
-> Read skills/agent-video/SKILL.md. Make a six-second vertical video using the local assets in my-video/assets. Write the project, check and plan it, render the MP4, inspect frames and audio, then return the output and the editable project.
+> Read skills/agent-video-studio/SKILL.md. Make a six-second vertical video using the local assets in my-video/assets. Write the project, check and plan it, render the MP4, inspect frames and audio, then return the output and the editable project.
 
 The CLI has no embedded LLM. The coding agent provides creative decisions and edits JSON. This version makes no network requests or paid generation calls.
 

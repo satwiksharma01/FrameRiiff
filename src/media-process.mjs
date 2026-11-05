@@ -65,14 +65,19 @@ export async function sourceMetadata(file, signal) {
   }
   if (!video && !audio) throw mediaError('INVALID_MEDIA', 'Media has no usable video or audio stream.');
   let fps = null;
+  let sourceFrameRate = null;
   if (video) {
     for (const value of [video.avg_frame_rate, video.r_frame_rate]) {
       const rate = String(value).split('/').map(Number);
       const candidate = rate.length === 2 ? rate[0] / rate[1] : rate[0];
-      if (Number.isFinite(candidate) && candidate > 0) { fps = candidate; break; }
+      if (Number.isFinite(candidate) && candidate > 0) {
+        fps = candidate;
+        if (/^[1-9]\d*\/[1-9]\d*$/.test(String(value))) sourceFrameRate = String(value);
+        break;
+      }
     }
     if (!Number.isFinite(fps) || fps <= 0 || !Number.isInteger(video.width) || !Number.isInteger(video.height)
         || video.width <= 0 || video.height <= 0) throw mediaError('INVALID_MEDIA', 'Video dimensions or frame rate are unavailable.');
   }
-  return { source, metadata, video, audio, duration, fps };
+  return { source, metadata, video, audio, duration, fps, sourceFrameRate };
 }

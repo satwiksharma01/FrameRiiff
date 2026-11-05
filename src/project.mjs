@@ -81,7 +81,7 @@ function fades(raw, duration, path) {
 }
 
 export function validateProject(value) {
-  const input = record(value, ['version', 'title', 'canvas', 'clips', 'words', 'captions', 'audio', 'overlays'], 'project');
+  const input = record(value, ['version', 'title', 'canvas', 'clips', 'words', 'captions', 'audio', 'overlays', 'graphics'], 'project');
   if (input.version !== 1) fail('project.version', 'expected version 1');
   const title = text(input.title, 'project.title', 200);
   const rawCanvas = record(input.canvas, ['width', 'height', 'fps'], 'project.canvas');
@@ -170,9 +170,10 @@ export function validateProject(value) {
   for (const [index, word] of words.entries()) {
     if (word.end > duration + 1e-9) fail(`project.words[${index}].end`, 'must fit inside the resolved project duration');
   }
+  let karaokeWordCount = 0;
   const captions = list(optional(input.captions, []), 'project.captions', 0, 200).map((raw, index) => {
     const path = `project.captions[${index}]`;
-    record(raw, ['text', 'start', 'end', 'fromWord', 'toWord', 'position', 'fontSize', 'color'], path);
+    record(raw, ['text', 'start', 'end', 'fromWord', 'toWord', 'position', 'fontSize', 'color', 'karaoke', 'highlightColor'], path);
     const caption = {
       position: optional(raw.position, 'bottom'),
       fontSize: number(optional(raw.fontSize, 48), `${path}.fontSize`, 12, 200, true),
@@ -180,6 +181,15 @@ export function validateProject(value) {
     };
     if (!['top', 'center', 'bottom'].includes(caption.position)) {
       fail(`${path}.position`, 'expected top, center, or bottom');
+    }
+    if (raw.karaoke !== undefined && typeof raw.karaoke !== 'boolean') fail(`${path}.karaoke`, 'expected a boolean');
+    if (raw.karaoke) {
+      if (!Object.hasOwn(raw, 'fromWord') || !Object.hasOwn(raw, 'toWord')) fail(`${path}.karaoke`, 'requires fromWord and toWord');
+      if (raw.text !== undefined) fail(`${path}.text`, 'karaoke displays the anchored words directly');
+      caption.karaoke = true;
+      caption.highlightColor = color(optional(raw.highlightColor, '#ffda65'), `${path}.highlightColor`);
+    } else if (raw.highlightColor !== undefined) {
+      fail(`${path}.highlightColor`, 'requires karaoke');
     }
     if (Object.hasOwn(raw, 'fromWord') || Object.hasOwn(raw, 'toWord')) {
       if (Object.hasOwn(raw, 'start') || Object.hasOwn(raw, 'end')) fail(path, 'word anchors cannot be mixed with explicit start/end');
@@ -190,7 +200,9 @@ export function validateProject(value) {
       caption.toWord = raw.toWord;
       if (raw.text !== undefined) caption.text = text(raw.text, `${path}.text`, 1000);
       // Validate derived text now without freezing the word-dependent value in project JSON.
-      resolveAnchor(caption, words, wordIds, path);
+      const resolved = resolveAnchor(caption, words, wordIds, path);
+      karaokeWordCount += resolved.karaokeWords?.length ?? 0;
+      if (karaokeWordCount > 1000) fail(path, 'the project cannot exceed 1000 karaoke word appearances');
     } else {
       caption.text = text(raw.text, `${path}.text`, 1000);
       caption.start = number(raw.start, `${path}.start`, 0, duration);
@@ -247,7 +259,46 @@ export function validateProject(value) {
     if (raw.kind === 'video') overlay.in = number(optional(raw.in, 0), `${path}.in`, 0, Number.MAX_SAFE_INTEGER);
     return overlay;
   });
-  return { version: 1, title, canvas, clips, words, captions, audio, overlays };
+  const project = { version: 1, title, canvas, clips, words, captions, audio, overlays };
+  if (input.graphics !== undefined) {
+    const graphicIds = new Set();
+    project.graphics = list(input.graphics, 'project.graphics', 0, 32).map((raw, index) => {
+      const path = `project.graphics[${index}]`;
+      record(raw, ['id', 'text', 'start', 'end', 'fromWord', 'toWord', 'position', 'fontSize', 'color', 'background', 'motion', 'enter'], path);
+      if (typeof raw.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(raw.id)) fail(`${path}.id`, 'expected a clip-style ID');
+      if (graphicIds.has(raw.id)) fail(`${path}.id`, `duplicate graphic ID ${raw.id}`);
+      graphicIds.add(raw.id);
+      const graphic = {
+        id: raw.id, text: text(raw.text, `${path}.text`, 240),
+        position: optional(raw.position, 'center'),
+        fontSize: number(optional(raw.fontSize, 48), `${path}.fontSize`, 12, 200, true),
+        color: color(optional(raw.color, '#ffffff'), `${path}.color`),
+        background: color(optional(raw.background, '#142036'), `${path}.background`),
+        motion: optional(raw.motion, 'none'),
+      };
+      if (!['top', 'center', 'bottom'].includes(graphic.position)) fail(`${path}.position`, 'expected top, center, or bottom');
+      if (!['none', 'fade', 'slide-up'].includes(graphic.motion)) fail(`${path}.motion`, 'expected none, fade, or slide-up');
+      if (graphic.text.split(/\r\n|\r|\n/).length > 4) fail(`${path}.text`, 'expected at most four lines');
+      let window;
+      if (Object.hasOwn(raw, 'fromWord') || Object.hasOwn(raw, 'toWord')) {
+        if (Object.hasOwn(raw, 'start') || Object.hasOwn(raw, 'end')) fail(path, 'word anchors cannot be mixed with numeric start/end');
+        window = wordWindow(raw, words, wordIds, path);
+        graphic.fromWord = raw.fromWord;
+        graphic.toWord = raw.toWord;
+      } else {
+        graphic.start = number(raw.start, `${path}.start`, 0, duration);
+        graphic.end = number(raw.end, `${path}.end`, 0, duration);
+        if (graphic.end <= graphic.start) fail(`${path}.end`, 'must be after start');
+        window = graphic;
+      }
+      if (raw.enter !== undefined) {
+        if (graphic.motion === 'none') fail(`${path}.enter`, 'requires entrance motion');
+        graphic.enter = number(raw.enter, `${path}.enter`, Number.MIN_VALUE, Math.min(3, window.end - window.start + 1e-9));
+      }
+      return graphic;
+    });
+  }
+  return project;
 }
 
 function wordWindow(raw, words, wordIds, path) {
@@ -262,12 +313,19 @@ function wordWindow(raw, words, wordIds, path) {
 function resolveAnchor(caption, words, wordIds, path) {
   const first = wordIds.get(caption.fromWord);
   const last = wordIds.get(caption.toWord);
-  const wording = caption.text === undefined ? words.slice(first, last + 1).map((word) => word.text).join(' ') : caption.text;
-  return {
-    text: text(wording, `${path}.text`, 1000),
+  const selected = words.slice(first, last + 1);
+  const wording = caption.text ?? selected.map(word => word.text).join(' ');
+  const resolved = {
+    text: text(wording, `${path}.text`, caption.karaoke ? 240 : 1000),
     start: words[first].start, end: words[last].end,
     position: caption.position, fontSize: caption.fontSize, color: caption.color,
   };
+  if (caption.karaoke) {
+    if (selected.length > 12) fail(path, 'a karaoke cue cannot exceed 12 words');
+    resolved.karaokeWords = selected.map(({ text, start, end }) => ({ text, start, end }));
+    resolved.highlightColor = caption.highlightColor;
+  }
+  return resolved;
 }
 
 export function resolveCaptions(project) {
@@ -296,6 +354,19 @@ export function resolveOverlays(project) {
     if (fromWord === undefined) return overlay;
     const window = wordWindow({ fromWord, toWord }, normalized.words, wordIds, `project.overlays[${index}]`);
     return { ...overlay, start: window.start, duration: window.end - window.start };
+  });
+}
+
+export function resolveGraphics(project) {
+  const normalized = validateProject(project);
+  const wordIds = new Map(normalized.words.map((word, index) => [word.id, index]));
+  return (normalized.graphics ?? []).map(({ fromWord, toWord, ...graphic }, index) => {
+    const resolved = fromWord === undefined ? graphic : {
+      ...graphic,
+      ...wordWindow({ fromWord, toWord }, normalized.words, wordIds, `project.graphics[${index}]`),
+    };
+    if (resolved.motion !== 'none') resolved.enter ??= Math.min(0.25, resolved.end - resolved.start);
+    return resolved;
   });
 }
 
