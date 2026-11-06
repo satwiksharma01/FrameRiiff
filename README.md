@@ -1,10 +1,10 @@
-# Agent Video Studio
+# FrameRiiff
 
-Agent Video Studio turns a reference and supplied assets into editable video projects, playable MP4s, and reusable variants. A coding agent studies the reference and authors the JSON. The CLI measures source evidence, validates the edit, renders it with FFmpeg, and records the output and its lineage.
+FrameRiiff turns a reference and supplied assets into editable video projects, playable MP4s, and reusable variants. A coding agent studies the reference and authors the JSON. The CLI measures source evidence, validates the edit, renders it with FFmpeg, and records the output and its lineage.
 
 Use a local reference and provide the replacement footage, images, audio, and brand material. Templates let the agent substitute a presenter, treatment, or topic while reusing the rest of the edit. Timed cards, karaoke captions, word-anchored cuts, B-roll, audio mixing, and resumable batches run in the standalone renderer.
 
-The optional Frameflow adapter is available through `agent-video-studio/frameflow`. See [FRAMEFLOW.md](FRAMEFLOW.md) for its storyboard contract. The main package entry exports the standalone preparation, project, template, render, batch, resume, and review APIs.
+The optional Frameflow adapter is available through `frameriiff/frameflow`. See [FRAMEFLOW.md](FRAMEFLOW.md) for its storyboard contract. The main package entry exports the standalone preparation, project, template, render, batch, resume, and review APIs.
 
 ## Run it
 
@@ -14,11 +14,11 @@ Run directly from this source directory, or install a locally built archive into
 
 ```powershell
 npm pack
-npm install --prefix ./studio-install --ignore-scripts ./agent-video-studio-0.1.0.tgz
-npm exec --prefix ./studio-install --no -- agent-video-studio --help
+npm install --prefix ./studio-install --ignore-scripts ./frameriiff-0.1.0.tgz
+npm exec --prefix ./studio-install --no -- frameriiff --help
 ```
 
-No global installation or registry publication is required. The examples below use the source launcher:
+The installed command is `frameriiff`. The `agent-video-studio` alias is also available. The examples below use the source launcher:
 
 ```powershell
 node bin/agent-video.mjs doctor
@@ -34,7 +34,7 @@ Read [FORMAT.md](FORMAT.md) for the complete project contract. Supported input f
 
 ## Reference to variants
 
-Open the video project in a coding agent and give it the production skill. Put supplied assets inside the project folder. Prepare the reference, read the generated request and contact sheet, and use them to author the edit. Add `--transcribe --language en` when local speech recognition is configured and you need reference word timings. [Production skill](skills/agent-video-studio/SKILL.md)
+Open the video project in a coding agent and give it the production skill. Put supplied assets inside the project folder. Prepare the reference, read the generated request and contact sheet, and use them to author the edit. Add `--transcribe --language en` when local speech recognition is configured and you need reference word timings. [Production skill](skills/frameriiff/SKILL.md)
 
 ```powershell
 node bin/agent-video.mjs prepare reference.mp4 --brief "Keep the fast opening and adapt the topic" --out-dir evidence --json
@@ -160,9 +160,9 @@ node bin/agent-video.mjs batch examples/hello/timed.json --variants examples/hel
 
 ## Use with an agent
 
-Give the agent the packaged production skill, a brief, and local media. Ask it to produce a video using this CLI. [Production skill](skills/agent-video-studio/SKILL.md)
+Give the agent the packaged production skill, a brief, and local media. Ask it to produce a video using this CLI. [Production skill](skills/frameriiff/SKILL.md)
 
-> Read skills/agent-video-studio/SKILL.md. Make a six-second vertical video using the local assets in my-video/assets. Write the project, check and plan it, render the MP4, inspect frames and audio, then return the output and the editable project.
+> Read skills/frameriiff/SKILL.md. Make a six-second vertical video using the local assets in my-video/assets. Write the project, check and plan it, render the MP4, inspect frames and audio, then return the output and the editable project.
 
 The CLI has no embedded LLM. The coding agent provides creative decisions and edits JSON. This version makes no network requests or paid generation calls.
 

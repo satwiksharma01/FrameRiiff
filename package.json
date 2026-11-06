@@ -1,11 +1,11 @@
 {
-  "name": "agent-video-studio",
+  "name": "frameriiff",
   "version": "0.1.0",
   "description": "Reference-driven video production and variants for coding agents",
   "type": "module",
   "private": true,
   "engines": { "node": ">=22" },
-  "bin": { "agent-video-studio": "bin/agent-video.mjs" },
+  "bin": { "frameriiff": "bin/agent-video.mjs", "agent-video-studio": "bin/agent-video.mjs" },
   "exports": { ".": "./src/index.mjs", "./frameflow": "./src/integration.mjs" },
   "files": ["bin", "src", "skills", "scripts/studio-demo.mjs", "scripts/smoke.mjs", "scripts/frameflow-smoke.mjs", "examples/hello/project.json", "examples/hello/edits.json", "examples/hello/words.json", "examples/hello/variants.json", "README.md", "FORMAT.md", "FRAMEFLOW.md", "THIRD_PARTY.md"],
   "scripts": {

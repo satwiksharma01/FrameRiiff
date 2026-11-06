@@ -1,9 +1,9 @@
 ---
-name: agent-video-studio
+name: frameriiff
 description: Inspect, reconstruct, transcribe, edit, composite, render, batch, and resume local videos through the independent Agent Video CLI and editable JSON projects. Uses supplied media; no media generation.
 ---
 
-# Agent Video Studio
+# FrameRiiff
 
 Turn the user's brief into a small, editable production. The CLI is the execution tool; you make the creative choices and author the JSON. Read `FORMAT.md` at the tool root before writing a project. This instruction file is original to this project.
 

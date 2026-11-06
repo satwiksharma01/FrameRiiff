@@ -6,39 +6,39 @@ import { readJob, runJob } from './jobs.mjs';
 import { groupWordCaptions } from './captions.mjs';
 import { runBatch } from './batch.mjs';
 
-const help = `Agent Video Studio — local video production for coding agents
+const help = `FrameRiiff — local video production for coding agents
 
-  agent-video-studio prepare reference.mp4 --out-dir session [--brief "What should change"] [--transcribe]
-  agent-video-studio materialize template.json --bindings choices.json --out project.json
-  agent-video-studio template-batch template.json --variants variants.json --out-dir new-directory
-  agent-video-studio map-words project.json --words sources.json --out timed.json [--karaoke]
-  agent-video-studio review video.mp4 --out-dir review [--project project.json]
+  frameriiff prepare reference.mp4 --out-dir session [--brief "What should change"] [--transcribe]
+  frameriiff materialize template.json --bindings choices.json --out project.json
+  frameriiff template-batch template.json --variants variants.json --out-dir new-directory
+  frameriiff map-words project.json --words sources.json --out timed.json [--karaoke]
+  frameriiff review video.mp4 --out-dir review [--project project.json]
 
-  agent-video init [directory]                    Create an editable demo project
-  agent-video doctor                              Check FFmpeg and FFprobe
-  agent-video check project.json                   Validate project and local assets
-  agent-video plan project.json                    Show the timeline without rendering
-  agent-video render project.json --out video.mp4  Render; never overwrite an output
-  agent-video status project.json --job UUID       Read a render's saved status
-  agent-video variant project.json --patch edits.json --out variant.json
-  agent-video captions project.json --words words.json --out timed.json [--group-size 4] [--karaoke]
-  agent-video batch project.json --variants variants.json --out-dir new-directory
-  agent-video inspect media.mp4 --out-dir evidence [--scene-threshold 0.3]
-  agent-video reconstruct media.mp4 --out-dir new-project [--scene-threshold 0.3]
-  agent-video transcribe media.mp4 --out-dir transcript [--language en]
-  agent-video resume project-directory --job UUID [--out new-video.mp4]
-  agent-video resume-batch batch-directory
-  agent-video reference-prepare reference.mp4 --inputs inputs.json --brief brief.json --out-dir session [--timings timings.json]
-  agent-video reference-check session
-  agent-video frameflow-check storyboard.json --inputs inputs.json --brief brief.json [--timings timings.json]
-  agent-video frameflow-export session --concept concept-id --out-dir handoff
-  agent-video reference-sample session --concept concept-id --seconds 10 --out-dir sample
+  frameriiff init [directory]                    Create an editable demo project
+  frameriiff doctor                              Check FFmpeg and FFprobe
+  frameriiff check project.json                   Validate project and local assets
+  frameriiff plan project.json                    Show the timeline without rendering
+  frameriiff render project.json --out video.mp4  Render; never overwrite an output
+  frameriiff status project.json --job UUID       Read a render's saved status
+  frameriiff variant project.json --patch edits.json --out variant.json
+  frameriiff captions project.json --words words.json --out timed.json [--group-size 4] [--karaoke]
+  frameriiff batch project.json --variants variants.json --out-dir new-directory
+  frameriiff inspect media.mp4 --out-dir evidence [--scene-threshold 0.3]
+  frameriiff reconstruct media.mp4 --out-dir new-project [--scene-threshold 0.3]
+  frameriiff transcribe media.mp4 --out-dir transcript [--language en]
+  frameriiff resume project-directory --job UUID [--out new-video.mp4]
+  frameriiff resume-batch batch-directory
+  frameriiff reference-prepare reference.mp4 --inputs inputs.json --brief brief.json --out-dir session [--timings timings.json]
+  frameriiff reference-check session
+  frameriiff frameflow-check storyboard.json --inputs inputs.json --brief brief.json [--timings timings.json]
+  frameriiff frameflow-export session --concept concept-id --out-dir handoff
+  frameriiff reference-sample session --concept concept-id --seconds 10 --out-dir sample
 
 Add --json for structured output. Paths in commands are relative to the working
 directory. Media paths inside a project are relative to that project's directory.
 Variants stay beside the original project; supplied top-level fields replace the
 original fields, including whole arrays. Use check before rendering a variant.
-`.replace(/^  agent-video /gm, '  agent-video-studio ');
+`;
 
 function fail(code, message) { throw Object.assign(new Error(message), { code }); }
 
